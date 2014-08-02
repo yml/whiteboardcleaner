@@ -9,6 +9,7 @@ import (
 )
 
 func main() {
+	filterOpts := whiteboardcleaner.NewOptions()
 	srcFile := flag.String("src", "", "path to the source image")
 	dstFile := flag.String("dst", "", "path of cleaned image")
 
@@ -23,7 +24,7 @@ func main() {
 	runtime.GOMAXPROCS(runtime.NumCPU())
 	src := whiteboardcleaner.LoadImage(*srcFile)
 
-	g := whiteboardcleaner.NewFilter()
+	g := whiteboardcleaner.NewFilter(filterOpts)
 	dst := image.NewRGBA(g.Bounds(src.Bounds()))
 	g.Draw(dst, src)
 	whiteboardcleaner.SaveImage(dst, *dstFile)

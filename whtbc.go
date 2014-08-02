@@ -19,15 +19,34 @@ func NewTempFile(prefix string) (*os.File, error) {
 	return ioutil.TempFile(dirName, prefix)
 }
 
-func NewFilter() *gift.GIFT {
+type Options struct {
+	EdgeDetectionKernelSize        int     // Need to be an odd kernel size (default 15)
+	ConvolutionMultiplicator       float32 // default 15
+	GaussianBlurSigma              float32 // default 1
+	SigmoidMidpoint, SigmoidFactor float32 // SigmoidMidpoint must be between 0 and 1 (default 0.75 100)
+	MedianKsize                    int     // MedianKsize must be positive odd number 3, 5, 7 (default 3)
+}
+
+func NewOptions() *Options {
+	return &Options{
+		EdgeDetectionKernelSize:  15,
+		ConvolutionMultiplicator: 15,
+		GaussianBlurSigma:        3,
+		SigmoidMidpoint:          0.75,
+		SigmoidFactor:            100,
+		MedianKsize:              3,
+	}
+}
+
+func NewFilter(opts *Options) *gift.GIFT {
 	// Vodoo suggested by gift author https://github.com/disintegration/gift/issues/5
 	return gift.New(
-		gift.Convolution(EdgeKernel(15), true, false, false, 0),
-		gift.Convolution([]float32{20}, false, false, false, 0),
+		gift.Convolution(EdgeKernel(opts.EdgeDetectionKernelSize), true, false, false, 0),
+		gift.Convolution([]float32{opts.ConvolutionMultiplicator}, false, false, false, 0),
 		gift.Invert(),
-		gift.GaussianBlur(3.0),
-		gift.Sigmoid(0.75, 100),
-		gift.Median(5, true),
+		gift.GaussianBlur(opts.GaussianBlurSigma),
+		gift.Sigmoid(opts.SigmoidMidpoint, opts.SigmoidFactor),
+		gift.Median(opts.MedianKsize, true),
 	)
 }
 

@@ -19,7 +19,7 @@ import (
 
 var (
 	maxMemory int64  = 1 * 1024 * 1024 // 1MB
-	indexPage []byte = []byte(`<!DOCTYPE html>
+	indexTmpl string = `<!DOCTYPE html>
 <html>
 	<head>
 		<meta charset="UTF-8"/>
@@ -28,25 +28,34 @@ var (
 		<form action="/upload/" method="POST" enctype="multipart/form-data">
 			<fieldset>
 			<legend>Edge detection</legend>
+			{{ if .Errors.EdgeDetectionKernelSize }}<div class="error">{{ .Errors.EdgeDetectionKernelSize }}</div>{{ end }}
 			<label for="EdgeDetectionKernelSize">EdgeDetectionKernelSize</label>
-			<input name="EdgeDetectionKernelSize" type="text"></input>
+			<input name="EdgeDetectionKernelSize" type="text" value="{{ .Opts.EdgeDetectionKernelSize }}"></input>
 
+			{{ if .Errors.ConvolutionMultiplicator }}<div class="error">{{ .Errors.ConvolutionMultiplicator }}</div>{{ end }}
 			<label for="ConvolutionMultiplicator">ConvolutionMultiplicator</label>
-			<input name="ConvolutionMultiplicator" type="text"></input>
+			<input name="ConvolutionMultiplicator" type="text" value="{{ .Opts.ConvolutionMultiplicator }}"></input>
 			</fieldset>
 
 			<fieldset>
 			<legend>cleanup the image to get a white backgound</legend>
+
+			{{ if .Errors.GaussianBlurSigma }}<div class="error">{{ .Errors.GaussianBlurSigma }}</div>{{ end }}
 			<label for="GaussianBlurSigma">GaussianBlurSigma</label>
-			<input name="GaussianBlurSigma" type="text"></input>
+			<input name="GaussianBlurSigma" type="text" value="{{ .Opts.GaussianBlurSigma }}"></input>
+		
+			{{ if .Errors.SigmoidMidpoint }}<div class="error">{{ .Errors.SigmoidMidpoint }}</div>{{ end }}
 			<label for="SigmoidMidpoint">SigmoidMidpoint</label>
-			<input name="SigmoidMidpoint" type="text"></input>
+			<input name="SigmoidMidpoint" type="text" value="{{ .Opts.SigmoidMidpoint }}"></input>
+
+			{{ if .Errors.MedianKsize }}<div class="error">{{ .Errors.MedianKsize }}</div>{{ end }}
 			<label for="MedianKsize">MedianKsize</label>
-			<input name="MedianKsize" type="text"></input>
+			<input name="MedianKsize" type="text" value="{{ .Opts.MedianKsize }}"></input>
 			</fieldset>
 			
 			<fieldset>
 			<legend>Image</legend>
+			{{ if .Errors.file }}<div class="error">{{ .Errors.file }}</div>{{ end }}
 			<label for="file">File:</label>
 			<input name="file" type="file"></input>
 			</fieldset>
@@ -55,7 +64,7 @@ var (
 		</form>
 	</body>
 </html>
-`)
+`
 
 	resultTmpl string = `<!DOCTYPE html>
 <html>
@@ -81,47 +90,64 @@ func uploadHandler(ctx *appContext) func(http.ResponseWriter, *http.Request) {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 		}
 		filterOpts := whiteboardcleaner.NewOptions()
+		errors := make(map[string]string)
 		// Update filterOpts with the values from the form
 		for k, v := range r.MultipartForm.Value {
 			switch k {
 			case "EdgeDetectionKernelSize":
 				val, err := strconv.Atoi(v[0])
 				if err != nil {
-					http.Error(w, err.Error(), http.StatusInternalServerError)
+					errors["EdgeDetectionKernelSize"] = err.Error()
 				}
 				filterOpts.EdgeDetectionKernelSize = val
 			case "ConvolutionMultiplicator":
 				val, err := strconv.ParseFloat(v[0], 32)
 				if err != nil {
-					http.Error(w, err.Error(), http.StatusInternalServerError)
+					errors["ConvolutionMultiplicator"] = err.Error()
 				}
 				filterOpts.ConvolutionMultiplicator = float32(val)
 			case "GaussianBlurSigma":
 				val, err := strconv.ParseFloat(v[0], 32)
 				if err != nil {
-					http.Error(w, err.Error(), http.StatusInternalServerError)
+					errors["GaussianBlurSigma"] = err.Error()
 				}
 				filterOpts.GaussianBlurSigma = float32(val)
 			case "SigmoidMidpoint":
 				val, err := strconv.ParseFloat(v[0], 32)
 				if err != nil {
-					http.Error(w, err.Error(), http.StatusInternalServerError)
+					errors["SigmoidMidpoint"] = err.Error()
 				}
 				filterOpts.SigmoidMidpoint = float32(val)
 			case "SigmoidFactor":
 				val, err := strconv.ParseFloat(v[0], 32)
 				if err != nil {
-					http.Error(w, err.Error(), http.StatusInternalServerError)
+					errors["SigmoidFactor"] = err.Error()
 				}
 				filterOpts.SigmoidFactor = float32(val)
 			case "MedianKsize":
 				val, err := strconv.Atoi(v[0])
 				if err != nil {
-					http.Error(w, err.Error(), http.StatusInternalServerError)
+					errors["MedianKsize"] = err.Error()
 				}
 				filterOpts.MedianKsize = val
 
 			}
+		}
+		if len(errors) > 0 {
+			tmpl := template.New("index")
+			tmpl, err := tmpl.Parse(indexTmpl)
+			if err != nil {
+				http.Error(w, err.Error(), http.StatusInternalServerError)
+			}
+			tmpl.Execute(
+				w,
+				struct {
+					Opts   *whiteboardcleaner.Options
+					Errors map[string]string
+				}{Opts: filterOpts, Errors: errors})
+
+			return
+
 		}
 
 		dirPath, err := ioutil.TempDir(ctx.TmpDir, ctx.PrefixTmpDir)
@@ -190,7 +216,19 @@ func resultHandler(ctx *appContext) func(w http.ResponseWriter, r *http.Request)
 }
 
 func indexHandler(w http.ResponseWriter, r *http.Request) {
-	w.Write(indexPage)
+	tmpl := template.New("index")
+	tmpl, err := tmpl.Parse(indexTmpl)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+	}
+	filterOpts := whiteboardcleaner.NewOptions()
+	errors := make(map[string]string)
+	tmpl.Execute(
+		w,
+		struct {
+			Opts   *whiteboardcleaner.Options
+			Errors map[string]string
+		}{Opts: filterOpts, Errors: errors})
 }
 
 func main() {

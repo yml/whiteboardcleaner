@@ -18,63 +18,65 @@ import (
 )
 
 var (
-	maxMemory int64  = 1 * 1024 * 1024 // 1MB
-	indexTmpl string = `<!DOCTYPE html>
+	maxMemory int64 = 1 * 1024 * 1024 // 1MB
+
+	layoutTmpl string = `{{ define "base" }}<!DOCTYPE html>
 <html>
 	<head>
 		<meta charset="UTF-8"/>
+		<title>{{ template "title" .}}</title>
 	</head>
 	<body>
-		<form action="/upload/" method="POST" enctype="multipart/form-data">
-			<fieldset>
-			<legend>Edge detection</legend>
-			{{ if .Errors.EdgeDetectionKernelSize }}<div class="error">{{ .Errors.EdgeDetectionKernelSize }}</div>{{ end }}
-			<label for="EdgeDetectionKernelSize">EdgeDetectionKernelSize</label>
-			<input name="EdgeDetectionKernelSize" type="text" value="{{ .Opts.EdgeDetectionKernelSize }}"></input>
-
-			{{ if .Errors.ConvolutionMultiplicator }}<div class="error">{{ .Errors.ConvolutionMultiplicator }}</div>{{ end }}
-			<label for="ConvolutionMultiplicator">ConvolutionMultiplicator</label>
-			<input name="ConvolutionMultiplicator" type="text" value="{{ .Opts.ConvolutionMultiplicator }}"></input>
-			</fieldset>
-
-			<fieldset>
-			<legend>cleanup the image to get a white backgound</legend>
-
-			{{ if .Errors.GaussianBlurSigma }}<div class="error">{{ .Errors.GaussianBlurSigma }}</div>{{ end }}
-			<label for="GaussianBlurSigma">GaussianBlurSigma</label>
-			<input name="GaussianBlurSigma" type="text" value="{{ .Opts.GaussianBlurSigma }}"></input>
-		
-			{{ if .Errors.SigmoidMidpoint }}<div class="error">{{ .Errors.SigmoidMidpoint }}</div>{{ end }}
-			<label for="SigmoidMidpoint">SigmoidMidpoint</label>
-			<input name="SigmoidMidpoint" type="text" value="{{ .Opts.SigmoidMidpoint }}"></input>
-
-			{{ if .Errors.MedianKsize }}<div class="error">{{ .Errors.MedianKsize }}</div>{{ end }}
-			<label for="MedianKsize">MedianKsize</label>
-			<input name="MedianKsize" type="text" value="{{ .Opts.MedianKsize }}"></input>
-			</fieldset>
-			
-			<fieldset>
-			<legend>Image</legend>
-			{{ if .Errors.file }}<div class="error">{{ .Errors.file }}</div>{{ end }}
-			<label for="file">File:</label>
-			<input name="file" type="file"></input>
-			</fieldset>
-
-			<input type="submit"></input>
-		</form>
+	{{ template "content" . }}
 	</body>
 </html>
+{{ end }}
 `
 
-	resultTmpl string = `<!DOCTYPE html>
-<html>
-	<head>
-		<meta charset="UTF-8"/>
-	</head>
-	<body>
-	{{ range . }}<div><img src="{{ . }}"/></div>{{ end }}
-	</body>
-</html>
+	resultTmpl string = `{{ define "title" }}Whiteboord cleaner | result{{ end }}
+{{ define "content" }}{{ range . }}<div><img src="{{ . }}"/></div>{{ end }}{{ end}}
+`
+
+	indexTmpl string = `{{ define "title" }}Whiteboard cleaner{{ end }}
+{{ define "content" }}
+	<form action="/upload/" method="POST" enctype="multipart/form-data">
+		<fieldset>
+		<legend>Edge detection</legend>
+		{{ if .Errors.EdgeDetectionKernelSize }}<div class="error">{{ .Errors.EdgeDetectionKernelSize }}</div>{{ end }}
+		<label for="EdgeDetectionKernelSize">EdgeDetectionKernelSize</label>
+		<input name="EdgeDetectionKernelSize" type="text" value="{{ .Opts.EdgeDetectionKernelSize }}"></input>
+
+		{{ if .Errors.ConvolutionMultiplicator }}<div class="error">{{ .Errors.ConvolutionMultiplicator }}</div>{{ end }}
+		<label for="ConvolutionMultiplicator">ConvolutionMultiplicator</label>
+		<input name="ConvolutionMultiplicator" type="text" value="{{ .Opts.ConvolutionMultiplicator }}"></input>
+		</fieldset>
+
+		<fieldset>
+		<legend>cleanup the image to get a white backgound</legend>
+
+		{{ if .Errors.GaussianBlurSigma }}<div class="error">{{ .Errors.GaussianBlurSigma }}</div>{{ end }}
+		<label for="GaussianBlurSigma">GaussianBlurSigma</label>
+		<input name="GaussianBlurSigma" type="text" value="{{ .Opts.GaussianBlurSigma }}"></input>
+	
+		{{ if .Errors.SigmoidMidpoint }}<div class="error">{{ .Errors.SigmoidMidpoint }}</div>{{ end }}
+		<label for="SigmoidMidpoint">SigmoidMidpoint</label>
+		<input name="SigmoidMidpoint" type="text" value="{{ .Opts.SigmoidMidpoint }}"></input>
+
+		{{ if .Errors.MedianKsize }}<div class="error">{{ .Errors.MedianKsize }}</div>{{ end }}
+		<label for="MedianKsize">MedianKsize</label>
+		<input name="MedianKsize" type="text" value="{{ .Opts.MedianKsize }}"></input>
+		</fieldset>
+		
+		<fieldset>
+		<legend>Image</legend>
+		{{ if .Errors.file }}<div class="error">{{ .Errors.file }}</div>{{ end }}
+		<label for="file">File:</label>
+		<input name="file" type="file"></input>
+		</fieldset>
+
+		<input type="submit"></input>
+	</form>
+{{ end }}
 `
 )
 
@@ -82,6 +84,7 @@ type appContext struct {
 	TmpDir                          string
 	PrefixTmpDir                    string
 	UploadURL, ResultURL, StaticURL string
+	Templates                       map[string]*template.Template
 }
 
 func uploadHandler(ctx *appContext) func(http.ResponseWriter, *http.Request) {
@@ -134,13 +137,10 @@ func uploadHandler(ctx *appContext) func(http.ResponseWriter, *http.Request) {
 			}
 		}
 		if len(errors) > 0 {
-			tmpl := template.New("index")
-			tmpl, err := tmpl.Parse(indexTmpl)
-			if err != nil {
-				http.Error(w, err.Error(), http.StatusInternalServerError)
-			}
-			tmpl.Execute(
+			tmpl := ctx.Templates["index"]
+			tmpl.ExecuteTemplate(
 				w,
+				"base",
 				struct {
 					Opts   *whiteboardcleaner.Options
 					Errors map[string]string
@@ -206,40 +206,43 @@ func resultHandler(ctx *appContext) func(w http.ResponseWriter, r *http.Request)
 			}
 			files[i] = filepath.Join(ctx.StaticURL, rel)
 		}
-		tmpl := template.New("result")
-		tmpl, err = tmpl.Parse(resultTmpl)
-		if err != nil {
-			http.Error(w, err.Error(), http.StatusInternalServerError)
-		}
-		tmpl.Execute(w, files)
+		tmpl := ctx.Templates["result"]
+		tmpl.ExecuteTemplate(w, "base", files)
 	}
 }
 
-func indexHandler(w http.ResponseWriter, r *http.Request) {
-	tmpl := template.New("index")
-	tmpl, err := tmpl.Parse(indexTmpl)
-	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+func indexHandler(ctx *appContext) func(http.ResponseWriter, *http.Request) {
+	return func(w http.ResponseWriter, r *http.Request) {
+		filterOpts := whiteboardcleaner.NewOptions()
+		errors := make(map[string]string)
+		tmpl := ctx.Templates["index"]
+		tmpl.ExecuteTemplate(
+			w,
+			"base",
+			struct {
+				Opts   *whiteboardcleaner.Options
+				Errors map[string]string
+			}{Opts: filterOpts, Errors: errors})
 	}
-	filterOpts := whiteboardcleaner.NewOptions()
-	errors := make(map[string]string)
-	tmpl.Execute(
-		w,
-		struct {
-			Opts   *whiteboardcleaner.Options
-			Errors map[string]string
-		}{Opts: filterOpts, Errors: errors})
 }
 
 func main() {
 	runtime.GOMAXPROCS(runtime.NumCPU())
 	addr := flag.String("addr", ":8080", "path to the source image")
+	tmpls := make(map[string]*template.Template)
+	layout := template.Must(template.New("Layout").Parse(layoutTmpl))
+	tmpl := template.Must(layout.Clone())
+	tmpls["index"] = template.Must(tmpl.New("index").Parse(indexTmpl))
+	tmpl = template.Must(layout.Clone())
+	tmpls["result"] = template.Must(tmpl.New("result").Parse(resultTmpl))
+
 	ctx := &appContext{
 		TmpDir:       os.TempDir(),
 		PrefixTmpDir: "whiteboardcleaner_",
 		UploadURL:    "/upload/",
 		ResultURL:    "/cleaned/",
 		StaticURL:    "/static/",
+		Templates:    tmpls,
 	}
 
 	fmt.Println("Starting whiteboard cleaner server listening on addr", *addr)
@@ -249,6 +252,6 @@ func main() {
 	mux.HandleFunc(ctx.ResultURL, resultHandler(ctx))
 	mux.Handle(ctx.StaticURL,
 		http.StripPrefix(ctx.StaticURL, http.FileServer(http.Dir(os.TempDir()))))
-	mux.HandleFunc("/", indexHandler)
+	mux.HandleFunc("/", indexHandler(ctx))
 	http.ListenAndServe(*addr, mux)
 }

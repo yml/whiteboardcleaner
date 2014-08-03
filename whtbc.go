@@ -7,6 +7,7 @@ import (
 	"io/ioutil"
 	"log"
 	"os"
+	"strconv"
 
 	"github.com/disintegration/gift"
 )
@@ -36,6 +37,54 @@ func NewOptions() *Options {
 		SigmoidFactor:            100,
 		MedianKsize:              3,
 	}
+}
+
+// ValidAndUpdate the Options based on r.MultipartForm.Value
+func (opts *Options) ValidAndUpdate(values map[string][]string) map[string]string {
+	errors := make(map[string]string)
+	// Update filterOpts with the values from the form
+	for k, v := range values {
+		switch k {
+		case "EdgeDetectionKernelSize":
+			val, err := strconv.Atoi(v[0])
+			if err != nil {
+				errors["EdgeDetectionKernelSize"] = err.Error()
+			}
+			opts.EdgeDetectionKernelSize = val
+		case "ConvolutionMultiplicator":
+			val, err := strconv.ParseFloat(v[0], 32)
+			if err != nil {
+				errors["ConvolutionMultiplicator"] = err.Error()
+			}
+			opts.ConvolutionMultiplicator = float32(val)
+		case "GaussianBlurSigma":
+			val, err := strconv.ParseFloat(v[0], 32)
+			if err != nil {
+				errors["GaussianBlurSigma"] = err.Error()
+			}
+			opts.GaussianBlurSigma = float32(val)
+		case "SigmoidMidpoint":
+			val, err := strconv.ParseFloat(v[0], 32)
+			if err != nil {
+				errors["SigmoidMidpoint"] = err.Error()
+			}
+			opts.SigmoidMidpoint = float32(val)
+		case "SigmoidFactor":
+			val, err := strconv.ParseFloat(v[0], 32)
+			if err != nil {
+				errors["SigmoidFactor"] = err.Error()
+			}
+			opts.SigmoidFactor = float32(val)
+		case "MedianKsize":
+			val, err := strconv.Atoi(v[0])
+			if err != nil {
+				errors["MedianKsize"] = err.Error()
+			}
+			opts.MedianKsize = val
+
+		}
+	}
+	return errors
 }
 
 func NewFilter(opts *Options) *gift.GIFT {

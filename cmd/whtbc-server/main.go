@@ -12,7 +12,6 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
-	"strconv"
 	"text/template"
 	"time"
 
@@ -95,49 +94,7 @@ func uploadHandler(ctx *appContext) http.HandlerFunc {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 		}
 		filterOpts := whiteboardcleaner.NewOptions()
-		errors := make(map[string]string)
-		// Update filterOpts with the values from the form
-		for k, v := range r.MultipartForm.Value {
-			switch k {
-			case "EdgeDetectionKernelSize":
-				val, err := strconv.Atoi(v[0])
-				if err != nil {
-					errors["EdgeDetectionKernelSize"] = err.Error()
-				}
-				filterOpts.EdgeDetectionKernelSize = val
-			case "ConvolutionMultiplicator":
-				val, err := strconv.ParseFloat(v[0], 32)
-				if err != nil {
-					errors["ConvolutionMultiplicator"] = err.Error()
-				}
-				filterOpts.ConvolutionMultiplicator = float32(val)
-			case "GaussianBlurSigma":
-				val, err := strconv.ParseFloat(v[0], 32)
-				if err != nil {
-					errors["GaussianBlurSigma"] = err.Error()
-				}
-				filterOpts.GaussianBlurSigma = float32(val)
-			case "SigmoidMidpoint":
-				val, err := strconv.ParseFloat(v[0], 32)
-				if err != nil {
-					errors["SigmoidMidpoint"] = err.Error()
-				}
-				filterOpts.SigmoidMidpoint = float32(val)
-			case "SigmoidFactor":
-				val, err := strconv.ParseFloat(v[0], 32)
-				if err != nil {
-					errors["SigmoidFactor"] = err.Error()
-				}
-				filterOpts.SigmoidFactor = float32(val)
-			case "MedianKsize":
-				val, err := strconv.Atoi(v[0])
-				if err != nil {
-					errors["MedianKsize"] = err.Error()
-				}
-				filterOpts.MedianKsize = val
-
-			}
-		}
+		errors := filterOpts.ValidAndUpdate(r.MultipartForm.Value)
 		if len(errors) > 0 {
 			tmpl := ctx.Templates["index"]
 			tmpl.ExecuteTemplate(
@@ -147,9 +104,7 @@ func uploadHandler(ctx *appContext) http.HandlerFunc {
 					Opts   *whiteboardcleaner.Options
 					Errors map[string]string
 				}{Opts: filterOpts, Errors: errors})
-
 			return
-
 		}
 
 		dirPath, err := ioutil.TempDir(ctx.TmpDir, ctx.PrefixTmpDir)
@@ -246,7 +201,7 @@ func wrap(h http.HandlerFunc) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		start := time.Now()
 		lw := &loggedResponseWriter{ResponseWriter: w, status: http.StatusOK}
-		l := log.New(os.Stdout, "[whiteboardcleaner]", 0)
+		l := log.New(os.Stdout, "[whiteboardcleaner] ", 0)
 		h.ServeHTTP(lw, r)
 		l.Printf("%s %s %d %s\n", r.Method, r.URL, lw.status, time.Since(start))
 	}

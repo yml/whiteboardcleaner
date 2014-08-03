@@ -89,7 +89,7 @@ type appContext struct {
 	Templates                       map[string]*template.Template
 }
 
-func uploadHandler(ctx *appContext) func(http.ResponseWriter, *http.Request) {
+func uploadHandler(ctx *appContext) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		if err := r.ParseMultipartForm(maxMemory); err != nil {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
@@ -193,7 +193,7 @@ func uploadHandler(ctx *appContext) func(http.ResponseWriter, *http.Request) {
 	}
 }
 
-func resultHandler(ctx *appContext) func(w http.ResponseWriter, r *http.Request) {
+func resultHandler(ctx *appContext) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		path := r.URL.Path
 		dirName, err := filepath.Rel(ctx.ResultURL, path)
@@ -213,7 +213,7 @@ func resultHandler(ctx *appContext) func(w http.ResponseWriter, r *http.Request)
 	}
 }
 
-func indexHandler(ctx *appContext) func(http.ResponseWriter, *http.Request) {
+func indexHandler(ctx *appContext) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path != "/" {
 			http.NotFound(w, r)

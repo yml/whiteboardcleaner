@@ -7,12 +7,14 @@ import (
 	"image/jpeg"
 	"io"
 	"io/ioutil"
+	"log"
 	"net/http"
 	"os"
 	"path/filepath"
 	"runtime"
 	"strconv"
 	"text/template"
+	"time"
 
 	"github.com/yml/whiteboardcleaner"
 )
@@ -213,6 +215,10 @@ func resultHandler(ctx *appContext) func(w http.ResponseWriter, r *http.Request)
 
 func indexHandler(ctx *appContext) func(http.ResponseWriter, *http.Request) {
 	return func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/" {
+			http.NotFound(w, r)
+			return
+		}
 		filterOpts := whiteboardcleaner.NewOptions()
 		errors := make(map[string]string)
 		tmpl := ctx.Templates["index"]
@@ -223,6 +229,26 @@ func indexHandler(ctx *appContext) func(http.ResponseWriter, *http.Request) {
 				Opts   *whiteboardcleaner.Options
 				Errors map[string]string
 			}{Opts: filterOpts, Errors: errors})
+	}
+}
+
+type loggedResponseWriter struct {
+	http.ResponseWriter
+	status int
+}
+
+func (l *loggedResponseWriter) WriteHeader(status int) {
+	l.status = status
+	l.ResponseWriter.WriteHeader(status)
+}
+
+func wrap(h http.HandlerFunc) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		start := time.Now()
+		lw := &loggedResponseWriter{ResponseWriter: w, status: http.StatusOK}
+		l := log.New(os.Stdout, "[whiteboardcleaner]", 0)
+		h.ServeHTTP(lw, r)
+		l.Printf("%s %s %d %s\n", r.Method, r.URL, lw.status, time.Since(start))
 	}
 }
 
@@ -248,10 +274,10 @@ func main() {
 	fmt.Println("Starting whiteboard cleaner server listening on addr", *addr)
 
 	mux := http.NewServeMux()
-	mux.HandleFunc(ctx.UploadURL, uploadHandler(ctx))
-	mux.HandleFunc(ctx.ResultURL, resultHandler(ctx))
+	mux.HandleFunc(ctx.UploadURL, wrap(uploadHandler(ctx)))
+	mux.HandleFunc(ctx.ResultURL, wrap(resultHandler(ctx)))
 	mux.Handle(ctx.StaticURL,
 		http.StripPrefix(ctx.StaticURL, http.FileServer(http.Dir(os.TempDir()))))
-	mux.HandleFunc("/", indexHandler(ctx))
+	mux.HandleFunc("/", wrap(indexHandler(ctx)))
 	http.ListenAndServe(*addr, mux)
 }

@@ -142,7 +142,7 @@ func uploadHandler(ctx *appContext) http.HandlerFunc {
 				}
 				jpeg.Encode(dstTemporaryFile, dst, &jpeg.Options{Quality: 99})
 				http.Redirect(
-					w, r, fmt.Sprintf("%s%s", ctx.ResultURL, dirName), http.StatusMovedPermanently)
+					w, r, fmt.Sprintf("%s%s", ctx.ResultURL, dirName), http.StatusFound)
 			}
 		}
 	}
